@@ -40,7 +40,9 @@ class SizeClassifierPipeline:
             filter_person=filter_person,
         )
         if not os.path.exists(size_model_path):
-            raise FileNotFoundError(f"Size model not found at {size_model_path}. Run train.py first.")
+            print(f"Size model not found at '{size_model_path}'. Running train.py to initialize models...")
+            from src.train import train_and_evaluate
+            train_and_evaluate()
 
         self.size_model: TinyNeuralNetwork = joblib.load(size_model_path)
         self.use_int8 = use_int8
@@ -284,3 +286,38 @@ class SizeClassifierPipeline:
         cv2.putText(out, f"Cls Latency:   {result['cls_time_ms']:.3f} ms", (r_x, card_y + 100), font, 0.48, green, 1)
 
         return out
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Run Object Size Classifier Pipeline on an image")
+    parser.add_argument("--image", type=str, default="data/raw/sample.png", help="Path to input image")
+    parser.add_argument("--fp32", action="store_true", help="Use FP32 Tiny NN instead of INT8")
+    parser.add_argument("--output", type=str, default="results/demo_image_result.jpg", help="Path to save HUD output")
+    args = parser.parse_args()
+
+    if not os.path.exists(args.image):
+        print(f"Error: image not found at '{args.image}'")
+        sys.exit(1)
+
+    frame = cv2.imread(args.image)
+    pipeline = SizeClassifierPipeline(use_int8=not args.fp32)
+    result = pipeline.process_frame(frame)
+
+    print("=" * 60)
+    print("OBJECT SIZE CLASSIFIER INFERENCE RESULT")
+    print("=" * 60)
+    print(f"Status           : {result['status']}")
+    print(f"Target           : {result['object_name']}")
+    print(f"Coverage         : {result['coverage_pct']:.2f}%")
+    print(f"Raw Size Class   : {result['raw_size_class']}")
+    print(f"Smoothed Class   : {result['smoothed_size_class']}")
+    print(f"Confidence       : {result['size_conf']:.1%}")
+    print(f"Detector Latency : {result['det_time_ms']:.2f} ms")
+    print(f"Classifier Latency: {result['cls_time_ms']:.4f} ms")
+    print("=" * 60)
+
+    hud = pipeline.render_hud(frame, result)
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    cv2.imwrite(args.output, hud)
+    print(f"Visualization saved to: {args.output}")

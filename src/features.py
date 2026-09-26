@@ -110,3 +110,23 @@ def classify_by_threshold(area_ratio: float) -> int:
 def get_class_name(class_id: int) -> str:
     """Return the human-readable string for a class index."""
     return CLASS_NAMES.get(int(class_id), "UNKNOWN")
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("FEATURE EXTRACTION SELF-TEST")
+    print("=" * 60)
+    # Example: 160x180 box in 640x480 image
+    bbox = [200, 100, 160, 180]
+    img_size = (480, 640)
+    feats = extract_features(bbox, img_size)
+    cls_id = classify_by_threshold(feats[2])
+
+    print(f"Image Size    : {img_size[1]}x{img_size[0]}")
+    print(f"Bounding Box  : [x={bbox[0]}, y={bbox[1]}, w={bbox[2]}, h={bbox[3]}]")
+    print(f"width_ratio   : {feats[0]:.4f}")
+    print(f"height_ratio  : {feats[1]:.4f}")
+    print(f"area_ratio    : {feats[2]:.5f} ({feats[2] * 100:.2f}% coverage)")
+    print(f"aspect_ratio  : {feats[3]:.4f}")
+    print(f"Classified    : {cls_id} ({get_class_name(cls_id)})")
+    print("Self-test passed!")

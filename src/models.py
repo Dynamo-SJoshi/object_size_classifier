@@ -7,6 +7,13 @@ Contains:
 """
 
 from typing import Dict, List, Tuple
+import os
+import sys
+from pathlib import Path
+
+# Add project root to sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import numpy as np
 from sklearn.neural_network import MLPClassifier
 
@@ -18,6 +25,10 @@ class BaselineAreaClassifier:
 
     def __init__(self):
         self.name = "Baseline Threshold"
+
+    def fit(self, X: np.ndarray = None, y: np.ndarray = None):
+        """No training required for fixed-threshold heuristic."""
+        return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         # X[:, 2] is area_ratio
@@ -36,13 +47,14 @@ class TinyNeuralNetwork:
     Tiny 4 -> 8 -> 8 -> 6 Neural Network with FP32 and INT8 quantization support.
     """
 
-    def __init__(self, random_state: int = 42):
+    def __init__(self, random_state: int = 42, max_iter: int = 3000):
         self.random_state = random_state
+        self.max_iter = max_iter
         self.mlp = MLPClassifier(
             hidden_layer_sizes=(8, 8),
             activation="relu",
             solver="lbfgs",
-            max_iter=3000,
+            max_iter=max_iter,
             random_state=random_state,
         )
         self.is_fitted = False
@@ -56,24 +68,28 @@ class TinyNeuralNetwork:
 
     def predict_fp32(self, X: np.ndarray) -> np.ndarray:
         """Run pure-NumPy FP32 inference."""
+        X_2d = np.atleast_2d(X)
         W1, W2, W3 = self.mlp.coefs_
         b1, b2, b3 = self.mlp.intercepts_
 
-        h1 = np.maximum(0.0, np.dot(X, W1) + b1)
+        h1 = np.maximum(0.0, np.dot(X_2d, W1) + b1)
         h2 = np.maximum(0.0, np.dot(h1, W2) + b2)
         logits = np.dot(h2, W3) + b3
-        return np.argmax(logits, axis=1)
+        res = np.argmax(logits, axis=1)
+        return res[0] if np.ndim(X) == 1 else res
 
     def predict_proba_fp32(self, X: np.ndarray) -> np.ndarray:
         """Softmax probabilities in FP32."""
+        X_2d = np.atleast_2d(X)
         W1, W2, W3 = self.mlp.coefs_
         b1, b2, b3 = self.mlp.intercepts_
 
-        h1 = np.maximum(0.0, np.dot(X, W1) + b1)
+        h1 = np.maximum(0.0, np.dot(X_2d, W1) + b1)
         h2 = np.maximum(0.0, np.dot(h1, W2) + b2)
         logits = np.dot(h2, W3) + b3
         exp_l = np.exp(logits - np.max(logits, axis=1, keepdims=True))
-        return exp_l / np.sum(exp_l, axis=1, keepdims=True)
+        probs = exp_l / np.sum(exp_l, axis=1, keepdims=True)
+        return probs[0] if np.ndim(X) == 1 else probs
 
     def _quantize_int8(self, X_calibration: np.ndarray) -> None:
         """
@@ -105,24 +121,60 @@ class TinyNeuralNetwork:
 
     def predict_int8(self, X: np.ndarray) -> np.ndarray:
         """Simulate INT8 quantized inference."""
+        X_2d = np.atleast_2d(X)
         w = self.int8_weights
         W1 = w["W1_q"] * w["s_W1"]
         W2 = w["W2_q"] * w["s_W2"]
         W3 = w["W3_q"] * w["s_W3"]
 
-        h1 = np.maximum(0.0, np.dot(X, W1) + w["b1"])
+        h1 = np.maximum(0.0, np.dot(X_2d, W1) + w["b1"])
         h2 = np.maximum(0.0, np.dot(h1, W2) + w["b2"])
         logits = np.dot(h2, W3) + w["b3"]
-        return np.argmax(logits, axis=1)
+        res = np.argmax(logits, axis=1)
+        return res[0] if np.ndim(X) == 1 else res
 
     def predict_proba_int8(self, X: np.ndarray) -> np.ndarray:
+        X_2d = np.atleast_2d(X)
         w = self.int8_weights
         W1 = w["W1_q"] * w["s_W1"]
         W2 = w["W2_q"] * w["s_W2"]
         W3 = w["W3_q"] * w["s_W3"]
 
-        h1 = np.maximum(0.0, np.dot(X, W1) + w["b1"])
+        h1 = np.maximum(0.0, np.dot(X_2d, W1) + w["b1"])
         h2 = np.maximum(0.0, np.dot(h1, W2) + w["b2"])
         logits = np.dot(h2, W3) + w["b3"]
         exp_l = np.exp(logits - np.max(logits, axis=1, keepdims=True))
-        return exp_l / np.sum(exp_l, axis=1, keepdims=True)
+        probs = exp_l / np.sum(exp_l, axis=1, keepdims=True)
+        return probs[0] if np.ndim(X) == 1 else probs
+
+
+if __name__ == "__main__":
+    import warnings
+    warnings.filterwarnings("ignore")
+    print("=" * 60)
+    print("TINY NEURAL NETWORK & BASELINE SELF-TEST")
+    print("=" * 60)
+    np.random.seed(42)
+    # Generate dummy 4-feature samples
+    X_dummy = np.random.rand(120, 4).astype(np.float32)
+    y_dummy = np.random.randint(0, 6, size=120)
+
+    # Test baseline
+    base = BaselineAreaClassifier()
+    base.fit(X_dummy, y_dummy)
+    pred_base = base.predict(X_dummy[:3])
+    print(f"Baseline Area Classifier predictions: {pred_base}")
+
+    # Test Tiny NN
+    tiny = TinyNeuralNetwork(max_iter=50)
+    tiny.fit(X_dummy, y_dummy)
+    pred_fp32 = tiny.predict_fp32(X_dummy[:3])
+    pred_int8 = tiny.predict_int8(X_dummy[:3])
+    print(f"Tiny NN FP32 predictions: {pred_fp32}")
+    print(f"Tiny NN INT8 predictions: {pred_int8}")
+
+    # Test single 1D vector input
+    single_fp32 = tiny.predict_fp32(X_dummy[0])
+    single_int8 = tiny.predict_int8(X_dummy[0])
+    print(f"Single 1D sample test -> FP32: {single_fp32}, INT8: {single_int8}")
+    print("All model architecture tests passed!")

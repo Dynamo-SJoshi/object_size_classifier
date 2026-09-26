@@ -47,7 +47,15 @@ class NanoDetDetector:
         filter_person: bool = True,
     ):
         if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model file not found at: {model_path}")
+            print(f"Model file not found at '{model_path}'. Downloading from official OpenCV Zoo...")
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            import urllib.request
+            url = "https://huggingface.co/opencv/object_detection_nanodet/resolve/main/object_detection_nanodet_2022nov.onnx"
+            try:
+                urllib.request.urlretrieve(url, model_path)
+                print(f"Successfully downloaded NanoDet model to '{model_path}'.")
+            except Exception as e:
+                raise FileNotFoundError(f"Model file not found at '{model_path}' and download failed: {e}")
 
         self.model_path = model_path
         self.prob_threshold = prob_threshold
@@ -328,3 +336,92 @@ class NanoDetDetector:
                 }
 
         return None
+
+    @staticmethod
+    def draw_detection(
+        image: np.ndarray,
+        detection: Dict[str, Union[List[float], float, int, str]],
+        color: Tuple[int, int, int] = (0, 255, 0),
+        extra_text: str = "",
+        class_agnostic: bool = True,
+    ) -> np.ndarray:
+        """
+        Draw a clean bounding box and label banner over the image.
+        In class-agnostic mode, labels item simply as 'OBJECT'.
+        """
+        out = image.copy()
+        x, y, w, h = [int(v) for v in detection["bbox"]]
+        conf = detection["confidence"]
+        name = "OBJECT" if class_agnostic else detection["class_name"].upper()
+
+        label = f"{name} {conf:.1%}"
+        if extra_text:
+            label += f" | {extra_text}"
+
+        cv2.rectangle(out, (x, y), (x + w, y + h), color, 2)
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.55
+        thickness = 1
+        (label_w, label_h), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+        banner_y1 = max(0, y - label_h - 8)
+        banner_y2 = y
+        cv2.rectangle(out, (x, banner_y1), (x + label_w + 10, banner_y2), color, -1)
+        cv2.putText(
+            out,
+            label,
+            (x + 5, banner_y2 - 4),
+            font,
+            font_scale,
+            (0, 0, 0),
+            thickness,
+            cv2.LINE_AA,
+        )
+        return out
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run NanoDet object detector")
+    parser.add_argument("--image", type=str, default="", help="Path to input image")
+    parser.add_argument("--camera", type=int, default=-1, help="Camera device index (e.g. 0)")
+    parser.add_argument("--model", type=str, default="models/detector/nanodet.onnx", help="Path to NanoDet ONNX")
+    parser.add_argument("--conf", type=float, default=0.20, help="Confidence threshold")
+    parser.add_argument("--no-filter-person", action="store_true", help="Disable person filtering")
+    args = parser.parse_args()
+
+    detector = NanoDetDetector(model_path=args.model, prob_threshold=args.conf, filter_person=not args.no_filter_person)
+
+    if args.image:
+        frame = cv2.imread(args.image)
+        if frame is None:
+            print(f"Error: could not read image at {args.image}")
+            sys.exit(1)
+        det = detector.detect_single(frame)
+        if det:
+            print(f"Detected: {det['class_name']} ({det['confidence']:.2%}) at bbox {det['bbox']}")
+            vis = detector.draw_detection(frame, det)
+            out_path = "results/detection_result.jpg"
+            cv2.imwrite(out_path, vis)
+            print(f"Visualization saved to {out_path}")
+        else:
+            print("No object detected exceeding threshold.")
+
+    elif args.camera >= 0:
+        cap = cv2.VideoCapture(args.camera)
+        print(f"Starting camera {args.camera}. Press 'q' to quit...")
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            det = detector.detect_single(frame)
+            if det:
+                frame = detector.draw_detection(frame, det)
+            cv2.imshow("NanoDet Single Object Detector", frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+        cap.release()
+        cv2.destroyAllWindows()
+    else:
+        print("Please provide either --image or --camera argument.")

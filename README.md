@@ -3,7 +3,7 @@
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![OpenCV ONNX](https://img.shields.io/badge/OpenCV-ONNX%20DNN-5C3EE8.svg?logo=opencv&logoColor=white)](https://opencv.org/)
 [![TinyML](https://img.shields.io/badge/TinyML-%3C3%20KB%20C%20Model-FF6F00.svg)](embedded/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 
 > A modular TinyML vision pipeline separating heavy object detection from an ultra-lightweight learned apparent-size classifier, built for laptop prototyping and optimized for edge/embedded deployment.
 
@@ -102,11 +102,14 @@ object-size-classifier/
 │   ├── accuracy.txt               # Model comparison report
 │   ├── benchmark.csv              # Measured execution latencies and FPS
 │   ├── confusion_matrix.png       # 4-panel confusion matrix visualization
-│   ├── hud_demo.jpg               # Dashboard HUD telemetry screenshot
+│   ├── demo_image_result.jpg      # Static image inference result
 │   ├── demo_earbud_case_small.png # Live demo snapshot (SMALL)
 │   ├── demo_earbud_verysmall.png  # Live demo snapshot (VERY_SMALL)
 │   ├── demo_sleeping_mask_medium.png # Live demo snapshot (MEDIUM)
 │   └── demo_target_zone_contour.png # Live demo snapshot (Target Zone)
+├── tests/
+│   ├── __init__.py                # Tests package
+│   └── test_pipeline.py           # Unit & integration test suite
 ├── requirements.txt
 └── README.md
 ```
@@ -146,13 +149,21 @@ Generates `results/confusion_matrix.png` and verifies size classification monoto
 python src/benchmark.py
 ```
 
-### 6. Run the Live Interactive Demo
+### 6. Run the Live Interactive Demo or Static Inference
 ```bash
 # Run with webcam in Figure-Ground Inspection Mode
 python src/app.py --camera 0
 
-# Or test on a static image
-python src/app.py --image data/raw/test_cam.jpg
+# Or test interactive app on a static image
+python src/app.py --image data/raw/sample.png
+
+# Or run non-interactive pipeline CLI
+python src/inference.py --image data/raw/sample.png
+```
+
+### 7. Run Unit & Integration Tests
+```bash
+python -m unittest discover tests
 ```
 
 **Figure-Ground Differentiation (Universal Object Sizing):**
@@ -236,4 +247,4 @@ Test 3 (Coverage: 28.50%):
 ## 7. License & Acknowledgments
 
 - **NanoDet Detector**: Pretrained weights from OpenCV Model Zoo (Apache 2.0 License).
-- **Core Pipeline & TinyML Firmware**: MIT License. Feel free to use, adapt, and deploy.
+- **Core Pipeline & TinyML Firmware**: GNU Affero General Public License v3.0 (AGPLv3). Feel free to inspect, adapt, and deploy.

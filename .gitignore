@@ -17,3 +17,12 @@ desktop.ini
 venv/
 .venv/
 env/
+
+# IDE configurations
+.vscode/
+.idea/
+
+# Local personal snapshots & webcam captures
+data/raw/*
+!data/raw/sample.png
+results/snapshot_*.jpg
