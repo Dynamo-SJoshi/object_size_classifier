@@ -2,6 +2,10 @@
 
 > A modular TinyML vision pipeline separating heavy object detection from an ultra-lightweight learned apparent-size classifier, built for laptop prototyping and optimized for edge/embedded deployment.
 
+<p align="center">
+  <img src="results/demo_earbud_case_small.png" width="620" alt="Object Size Classifier Live Demo Preview" />
+</p>
+
 ---
 
 ## 1. Architectural Overview
@@ -93,8 +97,11 @@ object-size-classifier/
 │   ├── accuracy.txt               # Model comparison report
 │   ├── benchmark.csv              # Measured execution latencies and FPS
 │   ├── confusion_matrix.png       # 4-panel confusion matrix visualization
-│   ├── detection_result.jpg       # Single-object detector test output
-│   └── hud_demo.jpg               # Dashboard HUD telemetry screenshot
+│   ├── hud_demo.jpg               # Dashboard HUD telemetry screenshot
+│   ├── demo_earbud_case_small.png # Live demo snapshot (SMALL)
+│   ├── demo_earbud_verysmall.png  # Live demo snapshot (VERY_SMALL)
+│   ├── demo_sleeping_mask_medium.png # Live demo snapshot (MEDIUM)
+│   └── demo_target_zone_contour.png # Live demo snapshot (Target Zone)
 ├── requirements.txt
 └── README.md
 ```
@@ -156,6 +163,20 @@ The system differentiates between **objects and the background** without needing
 - **`[S]`** : Reset tracking and temporal smoothing history.
 - **`[P]`** : Save screenshot snapshot to `results/`.
 - **`[Q]` / `[ESC]`** : Exit.
+
+### Live Demonstration & Verification
+
+| **VERY SMALL** (0.3% Coverage) | **SMALL** (3.1% Coverage) |
+|:---:|:---:|
+| <img src="results/demo_earbud_verysmall.png" alt="VERY SMALL earbud" width="380" /> | <img src="results/demo_earbud_case_small.png" alt="SMALL earbud case" width="380" /> |
+| *Single Earbud (0.3% frame) &rarr; `VERY_SMALL` (0.149 ms latency)* | *Earbud Case (3.1% frame) &rarr; `SMALL` (100% confidence)* |
+
+| **MEDIUM** (10.7% Coverage) | **Target Zone Universal Inspection** |
+|:---:|:---:|
+| <img src="results/demo_sleeping_mask_medium.png" alt="MEDIUM sleeping mask" width="380" /> | <img src="results/demo_target_zone_contour.png" alt="Contour target zone inspection" width="380" /> |
+| *Sleeping Mask (10.7% frame) &rarr; `MEDIUM` (100% confidence)* | *Arbitrary object / sketch isolated in Target Inspection Zone* |
+
+---
 
 ## 5. Benchmark Results & Findings
 
