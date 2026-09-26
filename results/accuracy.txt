@@ -1,0 +1,13 @@
+OBJECT SIZE CLASSIFIER - MODEL COMPARISON SUMMARY
+============================================================
+Dataset Total: 600 samples | Train: 370 | Test: 230
+Test Objects (Strict Unseen): ['shoe_unseen', 'bottle_unseen', 'book_B_unseen', 'mug_unseen', 'ball_unseen']
+
+Model                    | Accuracy   | F1-Score  
+--------------------------------------------------
+Baseline Threshold       | 0.8957     | 0.8929    
+Decision Tree            | 0.9087     | 0.9102    
+Tiny NN (FP32)           | 0.8870     | 0.8839    
+Tiny NN (INT8)           | 0.7826     | 0.7314    
+--------------------------------------------------
+INT8 to FP32 Agreement: 77.39%

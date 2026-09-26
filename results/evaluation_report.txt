@@ -1,0 +1,70 @@
+OBJECT SIZE CLASSIFIER - FULL EVALUATION REPORT
+============================================================
+
+1. MODEL PERFORMANCE ON UNSEEN OBJECTS:
+
+--- Baseline (Threshold) ---
+              precision    recall  f1-score   support
+
+  VERY_SMALL      1.000     1.000     1.000        44
+       SMALL      1.000     1.000     1.000        30
+      MEDIUM      1.000     1.000     1.000        42
+       LARGE      0.848     1.000     0.918        39
+  VERY_LARGE      0.622     0.824     0.709        34
+        HUGE      1.000     0.561     0.719        41
+
+    accuracy                          0.896       230
+   macro avg      0.912     0.897     0.891       230
+weighted avg      0.918     0.896     0.893       230
+
+--- Decision Tree ---
+              precision    recall  f1-score   support
+
+  VERY_SMALL      1.000     1.000     1.000        44
+       SMALL      1.000     1.000     1.000        30
+      MEDIUM      1.000     1.000     1.000        42
+       LARGE      0.972     0.897     0.933        39
+  VERY_LARGE      0.627     0.941     0.753        34
+        HUGE      0.963     0.634     0.765        41
+
+    accuracy                          0.909       230
+   macro avg      0.927     0.912     0.908       230
+weighted avg      0.934     0.909     0.910       230
+
+--- Tiny NN (FP32) ---
+              precision    recall  f1-score   support
+
+  VERY_SMALL      1.000     1.000     1.000        44
+       SMALL      1.000     1.000     1.000        30
+      MEDIUM      0.976     0.976     0.976        42
+       LARGE      0.826     0.974     0.894        39
+  VERY_LARGE      0.667     0.588     0.625        34
+        HUGE      0.816     0.756     0.785        41
+
+    accuracy                          0.887       230
+   macro avg      0.881     0.882     0.880       230
+weighted avg      0.884     0.887     0.884       230
+
+--- Tiny NN (INT8) ---
+              precision    recall  f1-score   support
+
+  VERY_SMALL      1.000     1.000     1.000        44
+       SMALL      1.000     0.967     0.983        30
+      MEDIUM      0.974     0.905     0.938        42
+       LARGE      0.878     0.923     0.900        39
+  VERY_LARGE      0.429     0.971     0.595        34
+        HUGE      0.000     0.000     0.000        41
+
+    accuracy                          0.783       230
+   macro avg      0.713     0.794     0.736       230
+weighted avg      0.712     0.783     0.731       230
+
+
+2. OBJECT-INDEPENDENCE EXPERIMENT (UNSEEN OBJECT: SHOE):
+         Distance Coverage %   Expected FP32 Prediction INT8 Prediction Confidence  Passed
+  3.5m (Far Away)       1.0% VERY_SMALL      VERY_SMALL      VERY_SMALL     100.0%    True
+   2.2m (Mid-Far)       4.5%      SMALL           SMALL           SMALL     100.0%    True
+    1.4m (Medium)      13.0%     MEDIUM          MEDIUM          MEDIUM     100.0%    True
+     0.9m (Close)      28.0%      LARGE           LARGE           LARGE     100.0%    True
+0.5m (Very Close)      52.0% VERY_LARGE      VERY_LARGE      VERY_LARGE      98.6%    True
+0.25m (Huge/Near)      82.0%       HUGE            HUGE      VERY_LARGE      79.7%    True
