@@ -1,5 +1,10 @@
 # Object Size Classifier
 
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![OpenCV ONNX](https://img.shields.io/badge/OpenCV-ONNX%20DNN-5C3EE8.svg?logo=opencv&logoColor=white)](https://opencv.org/)
+[![TinyML](https://img.shields.io/badge/TinyML-%3C3%20KB%20C%20Model-FF6F00.svg)](embedded/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#)
+
 > A modular TinyML vision pipeline separating heavy object detection from an ultra-lightweight learned apparent-size classifier, built for laptop prototyping and optimized for edge/embedded deployment.
 
 <p align="center">
@@ -130,7 +135,7 @@ python src/train.py
 ```
 This performs a **strict object-wise split** (holding out unseen objects like shoes, mugs, and balls), trains the models, performs INT8 quantization, and generates `embedded/model_data.h` and `embedded/model_data.cc`.
 
-### 4. Evaluate & Run Object-Independence Test (Section 15)
+### 4. Evaluate & Run Object-Independence Test
 ```bash
 python src/evaluate.py
 ```
@@ -141,7 +146,7 @@ Generates `results/confusion_matrix.png` and verifies size classification monoto
 python src/benchmark.py
 ```
 
-### 6. Run the Live Interactive Demo (Section 27)
+### 6. Run the Live Interactive Demo
 ```bash
 # Run with webcam in Figure-Ground Inspection Mode
 python src/app.py --camera 0
@@ -225,3 +230,10 @@ Test 3 (Coverage: 28.50%):
   Predicted Class : 3 (LARGE)
   Confidence      : 99.4%
 ```
+
+---
+
+## 7. License & Acknowledgments
+
+- **NanoDet Detector**: Pretrained weights from OpenCV Model Zoo (Apache 2.0 License).
+- **Core Pipeline & TinyML Firmware**: MIT License. Feel free to use, adapt, and deploy.
