@@ -136,24 +136,25 @@ python src/benchmark.py
 
 ### 6. Run the Live Interactive Demo (Section 27)
 ```bash
-# Run with webcam in Inspection Mode (default: focuses on held objects)
+# Run with webcam in Figure-Ground Inspection Mode
 python src/app.py --camera 0
 
 # Or test on a static image
 python src/app.py --image data/raw/test_cam.jpg
 ```
 
-**Interactive Controls & Inspection Mode:**
-- **`[F]`** : Toggle **Person Filtering / Inspection Mode** (ON by default):
-  - When ON: Ignores the user in the background so that any item you hold up or place in front of the camera is prioritized.
-  - When OFF: Detects all objects, including the user.
-- **`[T]`** : Toggle **Target Inspection Zone**:
-  - Displays a centered target guide box on screen.
-  - Any physical object placed inside (earbud cases, keys, screws, small gadgets, tools) is measured via contour/saliency, guaranteeing **100% detection for objects not in the COCO dataset**.
+**Figure-Ground Differentiation (Universal Object Sizing):**
+The system differentiates between **objects and the background** without needing to classify what the object is:
+- **`[B]`** : **Calibrate Background**:
+  - Press `[B]` when sitting in front of your camera to take a reference snapshot.
+  - From then on, **ANY new object** you introduce or hold in front of the camera is isolated instantly via background difference, regardless of shape, color, or material.
+- **`[T]`** : **Target Inspection Zone** (enabled by default):
+  - A target guide appears on screen. Hold any physical object inside the guide (sleeping mask, earbud case, tool, card, fabric, fruit), and GrabCut automatically shrink-wraps around the object and calculates its size.
+- **Mouse Click** : Click directly on any object in the live window to center the target inspection zone on it!
+- **`[F]`** : Toggle Person Filtering (ON by default).
 - **`[M]`** : Toggle between **INT8** and **FP32** TinyML models in real-time.
-- **`[+]` / `[-]`** : Increase/decrease detector sensitivity threshold.
-- **`[S]`** : Reset temporal smoothing history.
-- **`[P]`** : Save snapshot screenshot to `results/`.
+- **`[S]`** : Reset tracking and temporal smoothing history.
+- **`[P]`** : Save screenshot snapshot to `results/`.
 - **`[Q]` / `[ESC]`** : Exit.
 
 ## 5. Benchmark Results & Findings

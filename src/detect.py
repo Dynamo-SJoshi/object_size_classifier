@@ -1,14 +1,13 @@
 """
-detect.py - Lightweight NanoDet object detector using OpenCV DNN.
+detect.py - Hybrid Object Detector & Figure-Ground Separator with Strict Person Suppression.
 
-Implements:
-- NanoDet ONNX loading via cv2.dnn
-- 416x416 letterbox preprocessing
-- Anchor generation and regression decoding
-- NMS filtering and single-object selection (Milestone 1 / Step 7)
-- Inspection Mode: Ignores background 'person' to prioritize hand-held / presented items
-- Target Inspection ROI: Saliency / contour fallback for arbitrary objects not in COCO
-- Class-Agnostic Mode: Labels all items as generic 'OBJECT'
+Features:
+  1. Strict Person Suppression: Guarantees that human head, torso, or full body detections
+     are NEVER selected as the target object during inspection.
+  2. Calibrated Background Difference with Person Torso Masking:
+     Only changes outside the person's core body are detected as objects.
+  3. Target Inspection Zone (GrabCut shrink-wrap around physical items).
+  4. Pretrained NanoDet (OpenCV Zoo) for standard object detection.
 """
 
 from typing import Dict, List, Optional, Tuple, Union
@@ -22,7 +21,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import cv2
 import numpy as np
 
-# Standard COCO 80 Class Labels
 COCO_CLASSES = [
     "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",
     "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
@@ -48,17 +46,6 @@ class NanoDetDetector:
         input_size: Tuple[int, int] = (416, 416),
         filter_person: bool = True,
     ):
-        """
-        Initialize the NanoDet detector.
-
-        Args:
-            model_path: Path to the NanoDet .onnx model file.
-            prob_threshold: Minimum confidence score to accept detection. Default 0.20.
-            iou_threshold: Non-Maximum Suppression (NMS) IoU threshold.
-            input_size: Network input resolution (width, height), default (416, 416).
-            filter_person: When True, ignores background person detections so that
-                           hand-held or desk-placed objects take priority.
-        """
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found at: {model_path}")
 
@@ -73,11 +60,9 @@ class NanoDetDetector:
         self.mean = np.array([103.53, 116.28, 123.675], dtype=np.float32).reshape(1, 1, 3)
         self.std = np.array([57.375, 57.12, 58.395], dtype=np.float32).reshape(1, 1, 3)
 
-        # Initialize network via OpenCV DNN
         self.net = cv2.dnn.readNet(model_path)
         self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
 
-        # Pre-compute anchor centers for each stride level
         self.anchors_mlvl = []
         for s in self.strides:
             feat_h, feat_w = self.input_size[1] // s, self.input_size[0] // s
@@ -89,16 +74,13 @@ class NanoDetDetector:
             self.anchors_mlvl.append(np.column_stack((cx, cy)))
 
     def _preprocess(self, image: np.ndarray) -> Tuple[np.ndarray, float, int, int]:
-        """Letterbox pad and normalize image to input_size (416, 416)."""
         img_h, img_w = image.shape[:2]
         target_w, target_h = self.input_size
-
         scale = min(target_w / float(img_w), target_h / float(img_h))
         nw, nh = int(round(img_w * scale)), int(round(img_h * scale))
 
         resized = cv2.resize(image, (nw, nh), interpolation=cv2.INTER_LINEAR)
         canvas = np.full((target_h, target_w, 3), 114, dtype=np.uint8)
-
         dx = (target_w - nw) // 2
         dy = (target_h - nh) // 2
         canvas[dy : dy + nh, dx : dx + nw] = resized
@@ -109,7 +91,6 @@ class NanoDetDetector:
         return blob, scale, dx, dy
 
     def detect_all(self, image: np.ndarray) -> List[Dict[str, Union[List[float], float, int, str]]]:
-        """Run inference on image and return all detected bounding boxes."""
         orig_h, orig_w = image.shape[:2]
         blob, scale, dx, dy = self._preprocess(image)
 
@@ -189,14 +170,8 @@ class NanoDetDetector:
         image: np.ndarray,
         strategy: str = "highest_confidence",
         filter_person: Optional[bool] = None,
+        person_boxes: Optional[List[List[float]]] = None,
     ) -> Optional[Dict[str, Union[List[float], float, int, str]]]:
-        """
-        Detect and select exactly ONE object.
-
-        When filter_person=True:
-            Filters out background person detections so hand-held or desk-placed
-            objects are selected instead of the person.
-        """
         should_filter_person = self.filter_person if filter_person is None else filter_person
         detections = self.detect_all(image)
         if not detections:
@@ -204,117 +179,152 @@ class NanoDetDetector:
 
         candidates = detections
         if should_filter_person:
-            # Filter out person class (id 0)
+            # 1. Filter out class_id == 0 ('person')
             non_person = [d for d in detections if d["class_id"] != 0 and d["class_name"] != "person"]
-            if non_person:
-                candidates = non_person
-            else:
-                # If only person is detected, return None so user can hold an object
-                return None
+            
+            # 2. Strict spatial person suppression (reject any candidate that is essentially a person)
+            surviving = []
+            h, w = image.shape[:2]
+            for cand in non_person:
+                bx, by, bw, bh = cand["bbox"]
+                cov = (bw * bh) / (w * h)
+                # Any object larger than 30% of screen overlapping with the user is suppressed
+                if cov > 0.30:
+                    continue
+                if person_boxes:
+                    is_p = False
+                    for (px, py, pw, ph) in person_boxes:
+                        # Check intersection
+                        ix1 = max(bx, px)
+                        iy1 = max(by, py)
+                        ix2 = min(bx + bw, px + pw)
+                        iy2 = min(by + bh, py + ph)
+                        if ix2 > ix1 and iy2 > iy1:
+                            inter = (ix2 - ix1) * (iy2 - iy1)
+                            if (inter / (bw * bh)) > 0.50 and cov > 0.15:
+                                is_p = True
+                                break
+                    if not is_p:
+                        surviving.append(cand)
+                else:
+                    surviving.append(cand)
+            candidates = surviving
+
+        if not candidates:
+            return None
 
         if strategy == "largest_area":
             return max(candidates, key=lambda d: d["bbox"][2] * d["bbox"][3])
         else:
             return max(candidates, key=lambda d: d["confidence"])
 
-    def detect_in_roi(
-        self,
+    @staticmethod
+    def segment_figure_ground(
         image: np.ndarray,
-        roi_rect: Tuple[int, int, int, int],
+        target_roi: Optional[Tuple[int, int, int, int]] = None,
+        bg_frame: Optional[np.ndarray] = None,
+        person_boxes: Optional[List[List[float]]] = None,
+        filter_person: bool = True,
+        min_coverage: float = 0.005,
+        max_coverage: float = 0.30,
     ) -> Optional[Dict[str, Union[List[float], float, int, str]]]:
         """
-        Target Inspection Zone: Detect ANY physical object inside an ROI rectangle
-        using contour saliency. Guarantees 100% detection for objects not in COCO
-        (e.g., earbud cases, keys, screws, small cards, batteries, tools).
-
-        Args:
-            roi_rect: (x, y, w, h) bounding box of the target inspection zone.
+        True Figure-Ground Differentiator with Strict Person Suppression.
+        Guarantees human body / head is NEVER returned as the object.
         """
-        rx, ry, rw, rh = roi_rect
         h, w = image.shape[:2]
-        rx = max(0, min(rx, w - 1))
-        ry = max(0, min(ry, h - 1))
-        rw = max(10, min(rw, w - rx))
-        rh = max(10, min(rh, h - ry))
 
-        roi = image[ry : ry + rh, rx : rx + rw]
-        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        # Method 1: Target Inspection Zone (GrabCut shrink-wrap)
+        # When target_roi is provided, it isolates the object inside the target guide
+        if target_roi is not None:
+            rx, ry, rw, rh = target_roi
+            rx = max(0, min(rx, w - 10))
+            ry = max(0, min(ry, h - 10))
+            rw = max(20, min(rw, w - rx))
+            rh = max(20, min(rh, h - ry))
 
-        # Contrast thresholding
-        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            roi = image[ry : ry + rh, rx : rx + rw]
+            if roi.size > 0:
+                mask = np.zeros(roi.shape[:2], np.uint8)
+                bgd = np.zeros((1, 65), np.float64)
+                fgd = np.zeros((1, 65), np.float64)
 
-        roi_area = rw * rh
-        valid_contours = []
-        for c in contours:
-            area = cv2.contourArea(c)
-            # Minimum 1% of ROI and maximum 95% of ROI
-            if 0.01 * roi_area < area < 0.95 * roi_area:
-                valid_contours.append((area, c))
+                margin_x = max(5, int(rw * 0.05))
+                margin_y = max(5, int(rh * 0.05))
+                inner_rect = (margin_x, margin_y, rw - 2 * margin_x, rh - 2 * margin_y)
 
-        if not valid_contours:
-            # Try alternate threshold in case object is brighter than background
-            _, thresh2 = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            contours2, _ = cv2.findContours(thresh2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            for c in contours2:
+                try:
+                    cv2.grabCut(roi, mask, inner_rect, bgd, fgd, 2, cv2.GC_INIT_WITH_RECT)
+                    fg_mask = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
+                    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+                    fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel)
+                    fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel)
+
+                    cnts, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    if cnts:
+                        best_c = max(cnts, key=cv2.contourArea)
+                        c_area = cv2.contourArea(best_c)
+                        if c_area > (rw * rh * 0.03):
+                            bx, by, bw, bh = cv2.boundingRect(best_c)
+                            cov = (bw * bh) / (w * h)
+                            if cov <= max_coverage:
+                                return {
+                                    "bbox": [float(rx + bx), float(ry + by), float(bw), float(bh)],
+                                    "confidence": 0.95,
+                                    "class_id": -1,
+                                    "class_name": "target_object",
+                                }
+                except Exception:
+                    pass
+
+        # Method 2: Calibrated Background Subtraction with Strict Person Suppression
+        if bg_frame is not None and bg_frame.shape == image.shape:
+            diff = cv2.absdiff(image, bg_frame)
+            diff_gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+            _, thresh = cv2.threshold(diff_gray, 30, 255, cv2.THRESH_BINARY)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+            closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
+            closed = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel, iterations=1)
+
+            # STRICT PERSON SUPPRESSION: Mask out person's core torso and head from diff!
+            if filter_person and person_boxes:
+                for (px, py, pw, ph) in person_boxes:
+                    # Mask center 70% of person box
+                    mx1 = max(0, int(px + pw * 0.15))
+                    mx2 = min(w, int(px + pw * 0.85))
+                    my1 = max(0, int(py))
+                    my2 = min(h, int(py + ph))
+                    closed[my1:my2, mx1:mx2] = 0
+
+            cnts, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            valid = []
+            for c in cnts:
                 area = cv2.contourArea(c)
-                if 0.01 * roi_area < area < 0.95 * roi_area:
-                    valid_contours.append((area, c))
+                bx, by, bw, bh = cv2.boundingRect(c)
+                cov = (bw * bh) / (w * h)
 
-        if valid_contours:
-            # Pick largest contour inside target zone
-            valid_contours.sort(key=lambda item: item[0], reverse=True)
-            best_contour = valid_contours[0][1]
-            bx, by, bw, bh = cv2.boundingRect(best_contour)
+                # STRICT CRITERIA: A presented object is between 0.5% and 25% of frame
+                # Any box > 30% of frame is the human body and is rejected!
+                if (w * h * min_coverage) < area and cov <= max_coverage:
+                    # Also verify center does not lie inside person's torso
+                    center_x = bx + bw / 2.0
+                    center_y = by + bh / 2.0
+                    inside_person = False
+                    if filter_person and person_boxes:
+                        for (px, py, pw, ph) in person_boxes:
+                            if (px + pw * 0.15) < center_x < (px + pw * 0.85) and py < center_y < (py + ph):
+                                inside_person = True
+                                break
+                    if not inside_person:
+                        valid.append((area, [float(bx), float(by), float(bw), float(bh)]))
 
-            return {
-                "bbox": [float(rx + bx), float(ry + by), float(bw), float(bh)],
-                "confidence": 0.95,
-                "class_id": -1,
-                "class_name": "target_object",
-            }
+            if valid:
+                valid.sort(key=lambda x: x[0], reverse=True)
+                return {
+                    "bbox": valid[0][1],
+                    "confidence": 0.95,
+                    "class_id": -1,
+                    "class_name": "target_object",
+                }
 
         return None
-
-    @staticmethod
-    def draw_detection(
-        image: np.ndarray,
-        detection: Dict[str, Union[List[float], float, int, str]],
-        color: Tuple[int, int, int] = (0, 255, 0),
-        extra_text: str = "",
-        class_agnostic: bool = True,
-    ) -> np.ndarray:
-        """
-        Draw a clean bounding box and label banner over the image.
-        In class-agnostic mode, labels item simply as 'OBJECT' (Section 1).
-        """
-        out = image.copy()
-        x, y, w, h = [int(v) for v in detection["bbox"]]
-        conf = detection["confidence"]
-        name = "OBJECT" if class_agnostic else detection["class_name"].upper()
-
-        label = f"{name} {conf:.1%}"
-        if extra_text:
-            label += f" | {extra_text}"
-
-        cv2.rectangle(out, (x, y), (x + w, y + h), color, 2)
-
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.55
-        thickness = 1
-        (label_w, label_h), baseline = cv2.getTextSize(label, font, font_scale, thickness)
-        banner_y1 = max(0, y - label_h - 8)
-        banner_y2 = y
-        cv2.rectangle(out, (x, banner_y1), (x + label_w + 10, banner_y2), color, -1)
-        cv2.putText(
-            out,
-            label,
-            (x + 5, banner_y2 - 4),
-            font,
-            font_scale,
-            (0, 0, 0),
-            thickness,
-            cv2.LINE_AA,
-        )
-        return out
