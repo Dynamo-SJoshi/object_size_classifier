@@ -44,9 +44,9 @@ The detector and the size classifier are deliberately isolated.
 
 We measure **Apparent Size** (how much of the camera frame the detected object occupies), avoiding claims of physical dimensions without 3D depth information:
 
-$$\text{area\_ratio} = \frac{\text{box\_width} \times \text{box\_height}}{\text{image\_width} \times \text{image\_height}}$$
+$$\text{Area Ratio} = \frac{\text{Box Width} \times \text{Box Height}}{\text{Image Width} \times \text{Image Height}}$$
 
-| Class ID | Class Name | Frame Coverage ($\text{area\_ratio}$) |
+| Class ID | Class Name | Frame Coverage (`area_ratio`) |
 |---|---|---|
 | **0** | `VERY_SMALL` | 0.0% – 2.0% |
 | **1** | `SMALL` | 2.0% – 8.0% |
